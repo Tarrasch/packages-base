@@ -4,6 +4,7 @@
            , RankNTypes
            , MagicHash
            , UnboxedTuples
+           , ScopedTypeVariables
   #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -33,8 +34,10 @@ module GHC.IO (
 
         FilePath,
 
-        catchException, catchAny, throwIO,
-        mask, mask_, uninterruptibleMask, uninterruptibleMask_, 
+        catchException, catchExceptionWithStack,
+        catchAny, catchAnyWithStack,
+        throwIO,
+        mask, mask_, uninterruptibleMask, uninterruptibleMask_,
         MaskingState(..), getMaskingState,
         unsafeUnmask,
         onException, bracket, finally, evaluate
@@ -269,21 +272,34 @@ as normal (remember IO returns an unboxed pair...).
 
 Now catch# has type
 
-    catch# :: IO a -> (b -> IO a) -> IO a
+    catch# :: IO a -> (b -> ByteArray# -> IO a) -> IO a
 
 (well almost; the compiler doesn't know about the IO newtype so we
 have to work around that in the definition of catchException below).
 -}
 
-catchException :: Exception e => IO a -> (e -> IO a) -> IO a
-catchException (IO io) handler = IO $ catch# io handler'
-    where handler' e = case fromException e of
-                       Just e' -> unIO (handler e')
-                       Nothing -> raiseIO# e
+catchException :: forall a e. Exception e => IO a -> (e -> IO a) -> IO a
+catchException io handler = catchExceptionWithStack io handler'
+    where handler' :: e -> ByteArray# -> IO a
+          handler' e _stk = handler e
 
-catchAny :: IO a -> (forall e . Exception e => e -> IO a) -> IO a
-catchAny (IO io) handler = IO $ catch# io handler'
-    where handler' (SomeException e) = unIO (handler e)
+catchExceptionWithStack :: forall a e. Exception e => IO a -> (e -> ByteArray# -> IO a) -> IO a
+catchExceptionWithStack (IO io) handler = IO $ catch# io handler'
+    where handler' :: SomeException -> ByteArray# -> State# RealWorld -> (# State# RealWorld, a #)
+          handler' e stk =
+            case fromException e of
+              Just e' -> unIO (handler e' stk)
+              Nothing -> raiseWithStackIO# e stk
+
+catchAny :: forall a. IO a -> (forall e . Exception e => e -> IO a) -> IO a
+catchAny io handler = catchAnyWithStack io handler'
+    where handler' :: forall e. Exception e => e -> ByteArray# -> IO a
+          handler' e _stk = handler e
+
+catchAnyWithStack :: forall a. IO a -> (forall e . Exception e => e -> ByteArray# -> IO a) -> IO a
+catchAnyWithStack (IO io) handler = IO $ catch# io handler'
+    where handler' :: SomeException -> ByteArray# -> State# RealWorld -> (# State# RealWorld, a #)
+          handler' (SomeException e) stk = unIO (handler e stk)
 
 -- | A variant of 'throw' that can only be used within the 'IO' monad.
 --

@@ -67,8 +67,8 @@ runMainIO main =
                Nothing  -> return ()
                Just tid -> throwTo tid (toException UserInterrupt)
       main -- hs_exit() will flush
-    `catch`
-      topHandler
+    `catchExceptionWithStack`
+      topHandlerStack
 
 install_interrupt_handler :: IO () -> IO ()
 #ifdef mingw32_HOST_OS
@@ -108,7 +108,7 @@ foreign import ccall unsafe
 -- program.
 --
 runIO :: IO a -> IO a
-runIO main = catch main topHandler
+runIO main = catchExceptionWithStack main topHandlerStack
 
 -- | Like 'runIO', but in the event of an exception that causes an exit,
 -- we don't shut down the system cleanly, we just exit.  This is
@@ -123,7 +123,7 @@ runIO main = catch main topHandler
 -- safeExit.  There is a race to shut down between the main and child threads.
 --
 runIOFastExit :: IO a -> IO a
-runIOFastExit main = catch main topHandlerFastExit
+runIOFastExit main = catchExceptionWithStack main topHandlerFastExitStack
         -- NB. this is used by the testsuite driver
 
 -- | The same as 'runIO', but for non-IO computations.  Used for
@@ -131,25 +131,37 @@ runIOFastExit main = catch main topHandlerFastExit
 -- are used to export Haskell functions with non-IO types.
 --
 runNonIO :: a -> IO a
-runNonIO a = catch (a `seq` return a) topHandler
+runNonIO a = catchExceptionWithStack (a `seq` return a) topHandlerStack
+
+data MaybeStack = Stack ByteArray# | NoStack
 
 topHandler :: SomeException -> IO a
-topHandler err = catch (real_handler safeExit err) topHandler
+topHandler err = catchException (real_handler safeExit err NoStack) topHandler
+
+topHandlerStack :: SomeException -> ByteArray# -> IO a
+topHandlerStack err stk = catchExceptionWithStack (real_handler safeExit err (Stack stk)) topHandlerStack
 
 topHandlerFastExit :: SomeException -> IO a
-topHandlerFastExit err = 
-  catchException (real_handler fastExit err) topHandlerFastExit
+topHandlerFastExit err =
+  catchException (real_handler fastExit err NoStack) topHandlerFastExit
+
+topHandlerFastExitStack :: SomeException -> ByteArray# -> IO a
+topHandlerFastExitStack err stk =
+  catchExceptionWithStack (real_handler fastExit err (Stack stk)) topHandlerFastExitStack
 
 -- Make sure we handle errors while reporting the error!
 -- (e.g. evaluating the string passed to 'error' might generate
 --  another error, etc.)
 --
-real_handler :: (Int -> IO a) -> SomeException -> IO a
-real_handler exit se = do
+real_handler :: (Int -> IO a) -> SomeException -> MaybeStack -> IO a
+real_handler exit se stk = do
   flushStdHandles -- before any error output
   case fromException se of
       Just StackOverflow -> do
            reportStackOverflow
+           case stk of
+             Stack st -> IO (\s -> (# dumpStack# st s, () #) )
+             NoStack  -> return ()
            exit 2
 
       Just UserInterrupt  -> exitInterrupted
@@ -166,8 +178,11 @@ real_handler exit se = do
                               ioe_handle = Just hdl }
                    | Errno ioe == ePIPE, hdl == stdout -> exit 0
                 _ -> do reportError se
+                        case stk of
+                          Stack st -> IO (\s -> (# dumpStack# st s, () #) )
+                          NoStack  -> return ()
                         exit 1
-           
+
 
 -- try to flush stdout/stderr, but don't worry if we fail
 -- (these handles might have errors, and we don't want to go into

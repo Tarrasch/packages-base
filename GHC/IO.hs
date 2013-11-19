@@ -33,6 +33,9 @@ module GHC.IO (
         stToIO, ioToST, unsafeIOToST, unsafeSTToIO,
 
         FilePath,
+        ExecutionStack(..),
+        reifyStack,
+        dumpStack,
 
         catchException, catchExceptionWithStack,
         catchAny, catchAnyWithStack,
@@ -297,6 +300,17 @@ catchAnyWithStack :: forall a. IO a -> (forall e . Exception e => e -> ByteArray
 catchAnyWithStack (IO io) handler = IO $ catch# io handler'
     where handler' :: SomeException -> ByteArray# -> State# RealWorld -> (# State# RealWorld, a #)
           handler' (SomeException e) stk = unIO (handler e stk)
+
+data ExecutionStack = ExecutionStack ByteArray#
+
+reifyStack :: IO (ExecutionStack)
+reifyStack = IO (\s -> let (# new_s, byteArray# #) = reifyStack# s
+                           ba = ExecutionStack byteArray#
+                       in (# new_s, ba #) )
+
+dumpStack :: ExecutionStack -> IO ()
+dumpStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack# ba s
+                                          in (# new_s, () #))
 
 -- | A variant of 'throw' that can only be used within the 'IO' monad.
 --

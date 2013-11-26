@@ -100,11 +100,7 @@ dumpStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack# ba s
                                           in (# new_s, () #))
 
 -- | You never need to call this. Running it twice has no effect.
-dwarfInit :: IO ()
-dwarfInit = do
-    -- putStrLn "Initializing dwarf"
-    IO $ \s -> let s' = dwarfInit# s
-               in (# s', () #)
+foreign import ccall "Dwarf.h dwarf_init" dwarfInit :: IO ()
 
 -- | Free the memory allocated when doing 'dwarfInit'. This module doesn't
 -- automatically free the memory. Instead it will hang around for the whole
@@ -113,11 +109,7 @@ dwarfInit = do
 -- You never need to call this. Running it twice has no effect.
 --
 -- Be careful! The CStrings in 'Locationinfo' will become invalidated!
-dwarfFree :: IO ()
-dwarfFree = do
-    -- putStrLn "Deinitializing dwarf"
-    IO $ \s -> let s' = dwarfFree# s
-               in (# s', () #)
+foreign import ccall "Dwarf.h dwarf_free" dwarfFree :: IO ()
 
 -- | To use this type in the rest of this module is a TODO
 data DwarfUnit = DwarfUnit Addr#

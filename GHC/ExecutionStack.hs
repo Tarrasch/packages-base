@@ -28,7 +28,7 @@
 --
 -----------------------------------------------------------------------------
 
-{-# LANGUAGE UnboxedTuples, MagicHash, RecordWildCards #-}
+{-# LANGUAGE CPP, UnboxedTuples, MagicHash, RecordWildCards #-}
 module GHC.ExecutionStack (
   -- * Simple interface
     reifyStack

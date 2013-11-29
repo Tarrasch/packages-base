@@ -87,9 +87,10 @@ data ExecutionStack = ExecutionStack
 instance Show ExecutionStack where
     show = showExecutionStack
 
+-- TODO: Better name anyone?
 data StackUnit = StackUnit {
     unitName :: CString
-  , unitCompilationDirectory :: CString
+  , procedureName :: CString
   , locationInfos :: [LocationInfo]
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
@@ -144,6 +145,10 @@ instance Storable LocationInfo where
       #{poke DebugInfo, name  } ptr functionName
       -- Won't need poke. We include it for completeness
 
+data DwarfUnit2
+
+peekDwarfUnitName :: Ptr DwarfUnit2 -> IO CString
+peekDwarfUnitName ptr = #{peek PublicDwarfUnit, name } ptr
 
 showExecutionStack :: ExecutionStack -> String
 showExecutionStack stack =
@@ -168,7 +173,8 @@ dumpStack :: ExecutionStack -> IO ()
 dumpStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
                                           in (## new_s, () ##))
 
--- | You never need to call this. Running it twice has no effect.
+-- | Initialize Dwarf Memory. There's no need to call this, as the
+-- functions themselves call this. Safe to call twice
 foreign import ccall "Dwarf.h dwarf_ensure_init" dwarfInit :: IO ()
   -- Warning, dwarf_init() is something else! Its exported in libdwarf
 
@@ -176,7 +182,7 @@ foreign import ccall "Dwarf.h dwarf_ensure_init" dwarfInit :: IO ()
 -- automatically free the memory. Instead it will hang around for the whole
 -- program execution once it's initialized.
 --
--- You never need to call this. Running it twice has no effect.
+-- Safe to call twice.
 --
 -- Be careful! The CStrings in 'Locationinfo' will become invalidated!
 foreign import ccall "dwarf_free" dwarfFree :: IO ()
@@ -189,7 +195,7 @@ foreign import ccall "Dwarf.h dwarf_addr_num_infos"
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
   dwarfLookupIpForeign :: 
        Ptr () -- ^ Instruction Pointer
-    -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
+    -> Ptr (Ptr DwarfUnit2) -- ^ DwarfUnit Pointer Pointer
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written
@@ -202,8 +208,9 @@ dwarfLookupPtr ip maxNumInfos = do
     alloca $ \ppDwarfUnit ->
       allocaArray maxNumInfos $ \infos -> do
         numWritten <- dwarfLookupIpForeign ip ppDwarfUnit infos cMaxNumInfos
-        unitName <- return undefined -- ppDwarfUnit
-        unitCompilationDirectory <- return undefined -- ppDwarfUnit
+        pDwarfUnit <- peek ppDwarfUnit
+        unitName <- peekDwarfUnitName pDwarfUnit
+        procedureName <- return $ (error "D'oh, also have to get a DwarfProc") pDwarfUnit
         locationInfos <- mapM (peekElemOff infos)
                               [0..(fromIntegral numWritten)-1 :: Int]
         return StackUnit{..}

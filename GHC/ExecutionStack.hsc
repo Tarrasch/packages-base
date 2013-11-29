@@ -142,9 +142,9 @@ instance Storable LocationInfo where
       #{poke DebugInfo, name  } ptr functionName
       -- Won't need poke. We include it for completeness
 
-data DwarfUnit2
+data DwarfUnit
 
-peekDwarfUnitName :: Ptr DwarfUnit2 -> IO CString
+peekDwarfUnitName :: Ptr DwarfUnit -> IO CString
 peekDwarfUnitName ptr = #{peek PublicDwarfUnit, name } ptr
 
 showExecutionStack :: ExecutionStack -> String
@@ -192,7 +192,7 @@ foreign import ccall "Dwarf.h dwarf_addr_num_infos"
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
   dwarfLookupIpForeign :: 
        Ptr () -- ^ Instruction Pointer
-    -> Ptr (Ptr DwarfUnit2) -- ^ DwarfUnit Pointer Pointer
+    -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written

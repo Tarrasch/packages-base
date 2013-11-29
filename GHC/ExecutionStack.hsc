@@ -39,15 +39,17 @@ module GHC.ExecutionStack (
   , ExecutionStack ()
   , stackSize
   , stackIndex
-  -- ** Other
+  -- ** Structures the stack translates to
   , LocationInfo(..)
   , showLocationInfo
-  , dwarfInit
-  , dwarfFree
+  , StackUnit(..)
+  , showStackUnit
   -- * New stuff
   , dwarfLookupPtr
   , dwarfLookupAllPtr 
-  , StackUnit(..)
+  -- ** Other
+  , dwarfInit
+  , dwarfFree
   ) where
 
 import GHC.IO (IO(..)
@@ -78,7 +80,7 @@ data ExecutionStack = ExecutionStack
 instance Show ExecutionStack where
     show = showExecutionStack
 
--- TODO: Better name anyone?
+-- TODO: Better name?
 data StackUnit = StackUnit {
     unitName :: CString
   , procedureName :: CString
@@ -224,10 +226,6 @@ stackSize stack =
 
 stackIndex :: ExecutionStack -> Int -> Addr##
 stackIndex (ExecutionStack ba##) (I## i##) = indexAddrArray## ba## i##
-
-unI## :: Int -> Int##
-unI## (I## n##) = n##
-
 
 showCString :: CString -> String
 showCString = unsafePerformIO . peekCString

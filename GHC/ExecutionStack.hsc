@@ -39,6 +39,7 @@ module GHC.ExecutionStack (
   , ExecutionStack ()
   , stackSize
   , stackIndex
+  , stackIndexes
   -- ** Structures the stack translates to
   , LocationInfo(..)
   , showLocationInfo
@@ -70,7 +71,6 @@ import Text.Printf (printf)
 import Foreign.Storable (Storable(..))
 import Foreign.Marshal
 
--- We include MachDeps for the constants containing the sizes of values
 #include "Rts.h"
 
 data ExecutionStack = ExecutionStack
@@ -79,22 +79,45 @@ data ExecutionStack = ExecutionStack
 
 instance Show ExecutionStack where
     show = showExecutionStack
+-- | The number of functions on your stack
 
--- TODO: Better name?
+stackSize :: ExecutionStack -> Int
+stackSize stack =
+    I## (sizeofByteArray## (unExecutionStack stack)) `div` (#const SIZEOF_HSPTR)
+
+stackIndex :: ExecutionStack -> Int -> Ptr Instruction
+stackIndex (ExecutionStack ba##) (I## i##) = Ptr (indexAddrArray## ba## i##)
+
+stackIndexes :: ExecutionStack -> [Ptr Instruction]
+stackIndexes stack = map (stackIndex stack) [0..(stackSize stack)-1]
+
+
+-- TODO: Better name than StackUnit ?
 data StackUnit = StackUnit {
-    unitName :: CString
-  , procedureName :: CString
-  , locationInfos :: [LocationInfo]
+    unitName      :: !CString
+  , procedureName ::  CString -- TODO: redo strict
+  , locationInfos :: ![LocationInfo]
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
 
-showStackUnit :: StackUnit -> String
-showStackUnit su | null (locationInfos su) =
+-- TODO: Better name than prepareStackUnit?
+
+-- | Like 'show', but with a row of comments
+--
+-- Note, only safe when you've not called 'dwarfFree'
+prepareStackUnit :: StackUnit -> [String]
+prepareStackUnit su | null (locationInfos su) = (:[]) $
         -- showCString (unitName su) ++
         "???" ++
         " (using " ++ showCString (unitName su) ++ ")"
     --  mySrcFun (using /path/lib.so)
-showStackUnit su | otherwise = unlines $ map showLocationInfo $ locationInfos su
+prepareStackUnit su | otherwise = map showLocationInfo $ locationInfos su
+
+-- | Pretty-print a 'StackUnit'
+--
+-- Note, only safe when you've not called 'dwarfFree'
+showStackUnit :: StackUnit -> String
+showStackUnit = unlines . prepareStackUnit
 
 -- | This is a candidate for a Instruction Pointe.  This struct
 -- matches the C struct @DebugInfo_@, from dwarf.h
@@ -143,6 +166,7 @@ instance Storable LocationInfo where
       -- Won't need poke. We include it for completeness
 
 data DwarfUnit
+data Instruction
 
 peekDwarfUnitName :: Ptr DwarfUnit -> IO CString
 peekDwarfUnitName ptr = #{peek PublicDwarfUnit, name } ptr
@@ -150,12 +174,12 @@ peekDwarfUnitName ptr = #{peek PublicDwarfUnit, name } ptr
 showExecutionStack :: ExecutionStack -> String
 showExecutionStack stack =
     "Stack trace:\n" ++
-    concatMap display ([1..] `zip` traces)
+    concatMap display ([0..] `zip` units)
   where
-    traces = error "TODO"
-    display (ix, trace) = printf "%4u: " (ix :: Int) ++ displayTrace trace ++ "\n"
-    displayTrace (Just li)  = showLocationInfo li
-    displayTrace Nothing    = "... unknown ..."
+    units = unsafePerformIO $ mapM dwarfLookupAllPtr (stackIndexes stack)
+    display (ix, trace) = unlines $ zipWith ($) formatters strings
+      where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
+            strings    = prepareStackUnit trace
 
 -- | Reify the stack. This is the only way to get an ExecutionStack value.
 reifyStack :: IO (ExecutionStack)
@@ -180,25 +204,25 @@ foreign import ccall "Dwarf.h dwarf_ensure_init" dwarfInit :: IO ()
 -- program execution once it's initialized.
 --
 -- Safe to call twice.
---
+-- 
 -- Be careful! The CStrings in 'Locationinfo' will become invalidated!
 foreign import ccall "dwarf_free" dwarfFree :: IO ()
 
 -- For the given instruction pointer, how many LocationInfos does it have?
 foreign import ccall "Dwarf.h dwarf_addr_num_infos"
-    dwarfAddrNumInfos :: Ptr () -> IO CInt
+    dwarfAddrNumInfos :: Ptr Instruction -> IO CInt
 
 --  StgWord dwarf_lookup_ip(void *ip, DwarfUnit** p_unit, DebugInfo *infos, int max_num_infos)
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
   dwarfLookupIpForeign :: 
-       Ptr () -- ^ Instruction Pointer
+       Ptr Instruction -- ^ Instruction Pointer
     -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written
 
 dwarfLookupPtr :: 
-       Ptr () -- ^ Instruction Pointer
+       Ptr Instruction -- ^ Instruction Pointer
     -> Int -- ^ Max amount to write
     -> IO StackUnit -- ^ Result
 dwarfLookupPtr ip maxNumInfos = do
@@ -215,17 +239,9 @@ dwarfLookupPtr ip maxNumInfos = do
     cMaxNumInfos = fromIntegral maxNumInfos
 
 dwarfLookupAllPtr ::
-       Ptr ()
+       Ptr Instruction
     -> IO StackUnit
 dwarfLookupAllPtr ip = dwarfAddrNumInfos ip >>= (dwarfLookupPtr ip . fromIntegral)
-
--- | The number of functions on your stack
-stackSize :: ExecutionStack -> Int
-stackSize stack =
-    I## (sizeofByteArray## (unExecutionStack stack)) `div` (#const SIZEOF_HSPTR)
-
-stackIndex :: ExecutionStack -> Int -> Addr##
-stackIndex (ExecutionStack ba##) (I## i##) = indexAddrArray## ba## i##
 
 showCString :: CString -> String
 showCString = unsafePerformIO . peekCString

@@ -46,8 +46,8 @@ module GHC.ExecutionStack (
   , StackUnit(..)
   , showStackUnit
   -- * New stuff
-  , dwarfLookupPtr
-  , dwarfLookupAllPtr 
+  , getStackUnitCustom
+  , getStackUnit 
   -- ** Other
   , dwarfInit
   , dwarfFree
@@ -176,7 +176,7 @@ showExecutionStack stack =
     "Stack trace:\n" ++
     concatMap display ([0..] `zip` units)
   where
-    units = unsafePerformIO $ mapM dwarfLookupAllPtr (stackIndexes stack)
+    units = unsafePerformIO $ mapM getStackUnit (stackIndexes stack)
     display (ix, trace) = unlines $ zipWith ($) formatters strings
       where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
             strings    = prepareStackUnit trace
@@ -221,11 +221,11 @@ foreign import ccall "Dwarf.h dwarf_lookup_ip"
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written
 
-dwarfLookupPtr :: 
+getStackUnitCustom :: 
        Ptr Instruction -- ^ Instruction Pointer
     -> Int -- ^ Max amount to write
     -> IO StackUnit -- ^ Result
-dwarfLookupPtr ip maxNumInfos = do
+getStackUnitCustom ip maxNumInfos = do
     alloca $ \ppDwarfUnit ->
       allocaArray maxNumInfos $ \infos -> do
         numWritten <- dwarfLookupIpForeign ip ppDwarfUnit infos cMaxNumInfos
@@ -238,10 +238,10 @@ dwarfLookupPtr ip maxNumInfos = do
   where
     cMaxNumInfos = fromIntegral maxNumInfos
 
-dwarfLookupAllPtr ::
+getStackUnit ::
        Ptr Instruction
     -> IO StackUnit
-dwarfLookupAllPtr ip = dwarfAddrNumInfos ip >>= (dwarfLookupPtr ip . fromIntegral)
+getStackUnit ip = dwarfAddrNumInfos ip >>= (getStackUnitCustom ip . fromIntegral)
 
 showCString :: CString -> String
 showCString = unsafePerformIO . peekCString

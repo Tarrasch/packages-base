@@ -16,7 +16,7 @@
 -- myFunction :: IO ()
 -- myFunction = do
 --      stack <- currentExecutionStack
---      dumpStack stack
+--      dumpExecutionStack stack
 -- @
 --
 -- An 'ExecutionStack' is a data wrapper around 'ByteArray#'. The Array is
@@ -33,7 +33,7 @@
 module GHC.ExecutionStack (
   -- * Simple interface
     currentExecutionStack
-  , dumpStack
+  , dumpExecutionStack
   -- * Complicated interface
   -- ** ExecutionStack
   , ExecutionStack ()
@@ -190,8 +190,8 @@ currentExecutionStack = IO (\s -> let (## new_s, byteArray## ##) = reifyStack## 
 -- | Pretty print the stack. Will print it to stdout. Note that this is
 -- more efficent than doing 'print' as no intermediete Haskell values will
 -- get created
-dumpStack :: ExecutionStack -> IO ()
-dumpStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
+dumpExecutionStack :: ExecutionStack -> IO ()
+dumpExecutionStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
                                           in (## new_s, () ##))
 
 -- | Initialize Dwarf Memory. There's no need to call this, as the

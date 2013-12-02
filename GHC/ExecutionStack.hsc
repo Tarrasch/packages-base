@@ -15,7 +15,7 @@
 -- @
 -- myFunction :: IO ()
 -- myFunction = do
---      stack <- reifyStack
+--      stack <- currentExecutionStack
 --      dumpStack stack
 -- @
 --
@@ -32,7 +32,7 @@
 {-# LANGUAGE UnboxedTuples, MagicHash, RecordWildCards #-}
 module GHC.ExecutionStack (
   -- * Simple interface
-    reifyStack
+    currentExecutionStack
   , dumpStack
   -- * Complicated interface
   -- ** ExecutionStack
@@ -182,8 +182,8 @@ showExecutionStack stack =
             strings    = prepareStackUnit trace
 
 -- | Reify the stack. This is the only way to get an ExecutionStack value.
-reifyStack :: IO (ExecutionStack)
-reifyStack = IO (\s -> let (## new_s, byteArray## ##) = reifyStack## s
+currentExecutionStack :: IO (ExecutionStack)
+currentExecutionStack = IO (\s -> let (## new_s, byteArray## ##) = reifyStack## s
                            ba = ExecutionStack byteArray##
                        in (## new_s, ba ##) )
 

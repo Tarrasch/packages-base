@@ -46,8 +46,8 @@ module GHC.ExecutionStack (
   , StackUnit(..)
   , showStackUnit
   -- * New stuff
-  , getStackUnitCustom
   , getStackUnit 
+  , getStackUnitCustom
   -- ** Other
   , dwarfInit
   , dwarfFree

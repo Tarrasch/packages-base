@@ -184,15 +184,15 @@ showExecutionStack stack =
 -- | Reify the stack. This is the only way to get an ExecutionStack value.
 currentExecutionStack :: IO (ExecutionStack)
 currentExecutionStack = IO (\s -> let (## new_s, byteArray## ##) = reifyStack## s
-                           ba = ExecutionStack byteArray##
-                       in (## new_s, ba ##) )
+                                      ba = ExecutionStack byteArray##
+                                  in (## new_s, ba ##) )
 
 -- | Pretty print the stack. Will print it to stdout. Note that this is
 -- more efficent than doing 'print' as no intermediete Haskell values will
 -- get created
 dumpExecutionStack :: ExecutionStack -> IO ()
 dumpExecutionStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
-                                          in (## new_s, () ##))
+                                                   in (## new_s, () ##))
 
 -- | Initialize Dwarf Memory. There's no need to call this, as the
 -- functions themselves call this. Safe to call twice

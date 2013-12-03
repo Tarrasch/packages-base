@@ -108,6 +108,9 @@ test('stableptr005', normal, compile_and_run, [''])
 
 test('weak001', normal, compile_and_run, [''])
 
+test('executionStack001', normal, compile_and_run, ['-g'])
+test('executionStack002', normal, compile_and_run, [''])
+
 # In the 65001 codepage, we can't even cat the expected output on msys:
 #     $ cat 4006.stdout
 #     It works here

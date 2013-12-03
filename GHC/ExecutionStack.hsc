@@ -41,14 +41,14 @@ module GHC.ExecutionStack (
   , stackIndex
   , stackIndexes
   -- ** Structures the stack can translate to
-  , StackUnit(..)
-  , showStackUnit
+  , StackFrame(..)
+  , showStackFrame
   , LocationInfo(..)
   , showLocationInfo
-  -- ** Get StackUnits
-  , getStackUnits
-  , getStackUnit 
-  , getStackUnitCustom
+  -- ** Get StackFrames
+  , getStackFrames
+  , getStackFrame 
+  , getStackFrameCustom
   -- ** Other
   , dwarfInit
   , dwarfFree
@@ -93,32 +93,31 @@ stackIndexes :: ExecutionStack -> [Ptr Instruction]
 stackIndexes stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 
--- TODO: Better name than StackUnit ?
-data StackUnit = StackUnit {
+data StackFrame = StackFrame {
     unitName      :: !String
   , procedureName ::  String -- TODO: redo strict
   , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
 
--- TODO: Better name than prepareStackUnit?
+-- TODO: Better name than prepareStackFrame?
 
 -- | Like 'show', but with a row of comments
 --
 -- Note, only safe when you've not called 'dwarfFree'
-prepareStackUnit :: StackUnit -> [String]
-prepareStackUnit su | null (locationInfos su) = (:[]) $
+prepareStackFrame :: StackFrame -> [String]
+prepareStackFrame su | null (locationInfos su) = (:[]) $
         -- unitName su ++
         "???" ++
         " (using " ++ unitName su ++ ")"
     --  mySrcFun (using /path/lib.so)
-prepareStackUnit su | otherwise = map showLocationInfo $ locationInfos su
+prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
 
--- | Pretty-print a 'StackUnit'
+-- | Pretty-print a 'StackFrame'
 --
 -- Note, only safe when you've not called 'dwarfFree'
-showStackUnit :: StackUnit -> String
-showStackUnit = unlines . prepareStackUnit
+showStackFrame :: StackFrame -> String
+showStackFrame = unlines . prepareStackFrame
 
 -- | This is a candidate for a Instruction Pointe.  This struct
 -- matches the C struct @DebugInfo_@, from dwarf.h
@@ -171,10 +170,10 @@ showExecutionStack stack =
     "Stack trace:\n" ++
     concatMap display ([0..] `zip` units)
   where
-    units = unsafePerformIO $ mapM getStackUnit (stackIndexes stack)
+    units = unsafePerformIO $ mapM getStackFrame (stackIndexes stack)
     display (ix, trace) = unlines $ zipWith ($) formatters strings
       where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
-            strings    = prepareStackUnit trace
+            strings    = prepareStackFrame trace
 
 -- | Reify the stack. This is the only way to get an ExecutionStack value.
 currentExecutionStack :: IO (ExecutionStack)
@@ -216,11 +215,11 @@ foreign import ccall "Dwarf.h dwarf_lookup_ip"
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written
 
-getStackUnitCustom :: 
+getStackFrameCustom :: 
        Ptr Instruction -- ^ Instruction Pointer
     -> Int -- ^ Max amount to write
-    -> IO StackUnit -- ^ Result
-getStackUnitCustom ip maxNumInfos = do
+    -> IO StackFrame -- ^ Result
+getStackFrameCustom ip maxNumInfos = do
     alloca $ \ppDwarfUnit ->
       allocaArray maxNumInfos $ \infos -> do
         numWritten <- dwarfLookupIpForeign ip ppDwarfUnit infos cMaxNumInfos
@@ -229,16 +228,16 @@ getStackUnitCustom ip maxNumInfos = do
         procedureName <- return $ (error "D'oh, also have to get a DwarfProc") pDwarfUnit
         locationInfos <- mapM (peekElemOff infos)
                               [0..(fromIntegral numWritten)-1 :: Int]
-        return StackUnit{..}
+        return StackFrame{..}
   where
     cMaxNumInfos = fromIntegral maxNumInfos
 
-getStackUnit ::
+getStackFrame ::
        Ptr Instruction
-    -> IO StackUnit
-getStackUnit ip = dwarfAddrNumInfos ip >>= (getStackUnitCustom ip . fromIntegral)
+    -> IO StackFrame
+getStackFrame ip = dwarfAddrNumInfos ip >>= (getStackFrameCustom ip . fromIntegral)
 
-getStackUnits ::
+getStackFrames ::
        ExecutionStack
-    -> IO [StackUnit]
-getStackUnits = mapM getStackUnit . stackIndexes
+    -> IO [StackFrame]
+getStackFrames = mapM getStackFrame . stackIndexes

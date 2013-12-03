@@ -97,7 +97,7 @@ stackIndexes stack = map (stackIndex stack) [0..(stackSize stack)-1]
 data StackUnit = StackUnit {
     unitName      :: !String
   , procedureName ::  String -- TODO: redo strict
-  , locationInfos :: ![LocationInfo]
+  , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
 

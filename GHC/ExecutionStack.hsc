@@ -146,7 +146,7 @@ showLocationInfo LocationInfo{..} =
 
 instance Storable LocationInfo where
     sizeOf _ = (#size DebugInfo)
-    alignment _ = alignment (undefined :: CInt) -- TODO (I just guessed)
+    alignment _ = alignment (undefined :: CInt)
 
     peek ptr = do
       startLine    <- #{peek DebugInfo, sline } ptr

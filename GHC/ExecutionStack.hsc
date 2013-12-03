@@ -95,8 +95,8 @@ stackIndexes stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 -- TODO: Better name than StackUnit ?
 data StackUnit = StackUnit {
-    unitName      :: !CString
-  , procedureName ::  CString -- TODO: redo strict
+    unitName      :: !String
+  , procedureName ::  String -- TODO: redo strict
   , locationInfos :: ![LocationInfo]
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
@@ -108,9 +108,9 @@ data StackUnit = StackUnit {
 -- Note, only safe when you've not called 'dwarfFree'
 prepareStackUnit :: StackUnit -> [String]
 prepareStackUnit su | null (locationInfos su) = (:[]) $
-        -- showCString (unitName su) ++
+        -- unitName su ++
         "???" ++
-        " (using " ++ showCString (unitName su) ++ ")"
+        " (using " ++ unitName su ++ ")"
     --  mySrcFun (using /path/lib.so)
 prepareStackUnit su | otherwise = map showLocationInfo $ locationInfos su
 
@@ -127,8 +127,8 @@ data LocationInfo = LocationInfo {
            startCol     :: !Word16,
            endLine      :: !Word16,
            endCol       :: !Word16,
-           fileName     :: !CString,
-           functionName :: !CString
+           fileName     :: !String,
+           functionName :: !String
            }
            deriving(Eq)
 
@@ -136,8 +136,8 @@ data LocationInfo = LocationInfo {
 -- was created. For this reason 'LocationInfo' have no Show instance.
 showLocationInfo :: LocationInfo -> String
 showLocationInfo LocationInfo{..} =
-    showCString functionName ++
-    " (at " ++ showCString fileName ++
+    functionName ++
+    " (at " ++ fileName ++
     ":" ++ show startLine ++ ":" ++ show startCol ++
     "-" ++ show endLine ++ ":" ++ show endCol ++
     ")"
@@ -153,18 +153,12 @@ instance Storable LocationInfo where
       startCol     <- #{peek DebugInfo, scol  } ptr
       endLine      <- #{peek DebugInfo, eline } ptr
       endCol       <- #{peek DebugInfo, ecol  } ptr
-      fileName     <- #{peek DebugInfo, file  } ptr
-      functionName <- #{peek DebugInfo, name  } ptr
+      fileName     <- #{peek DebugInfo, file  } ptr >>= peekCString
+      functionName <- #{peek DebugInfo, name  } ptr >>= peekCString
       return LocationInfo {..}
 
-    poke ptr (LocationInfo{..}) = do
-      #{poke DebugInfo, sline } ptr startLine
-      #{poke DebugInfo, scol  } ptr startCol
-      #{poke DebugInfo, eline } ptr endLine
-      #{poke DebugInfo, ecol  } ptr endCol
-      #{poke DebugInfo, file  } ptr fileName
-      #{poke DebugInfo, name  } ptr functionName
-      -- Won't need poke. We include it for completeness
+    poke ptr (LocationInfo{..}) =
+        error "Sorry, we're not really Storable, just use it for peek :("
 
 data DwarfUnit
 data Instruction
@@ -231,7 +225,7 @@ getStackUnitCustom ip maxNumInfos = do
       allocaArray maxNumInfos $ \infos -> do
         numWritten <- dwarfLookupIpForeign ip ppDwarfUnit infos cMaxNumInfos
         pDwarfUnit <- peek ppDwarfUnit
-        unitName <- peekDwarfUnitName pDwarfUnit
+        unitName <- peekDwarfUnitName pDwarfUnit >>= peekCString
         procedureName <- return $ (error "D'oh, also have to get a DwarfProc") pDwarfUnit
         locationInfos <- mapM (peekElemOff infos)
                               [0..(fromIntegral numWritten)-1 :: Int]
@@ -248,8 +242,3 @@ getStackUnits ::
        ExecutionStack
     -> IO [StackUnit]
 getStackUnits = mapM getStackUnit . stackIndexes
-
-showCString :: CString -> String
-showCString = unsafePerformIO . peekCString
-  -- It's safe to read here oftentimes in this module.  The c-strings are
-  -- allocated on the actual C heap, which is not handled by the rts.

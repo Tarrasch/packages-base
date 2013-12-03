@@ -47,6 +47,7 @@ module GHC.ExecutionStack (
   , showStackUnit
   -- * New stuff
   , getStackUnit 
+  , getStackUnits
   , getStackUnitCustom
   -- ** Other
   , dwarfInit
@@ -242,6 +243,11 @@ getStackUnit ::
        Ptr Instruction
     -> IO StackUnit
 getStackUnit ip = dwarfAddrNumInfos ip >>= (getStackUnitCustom ip . fromIntegral)
+
+getStackUnits ::
+       ExecutionStack
+    -> IO [StackUnit]
+getStackUnits = mapM getStackUnit . stackIndexes
 
 showCString :: CString -> String
 showCString = unsafePerformIO . peekCString

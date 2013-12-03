@@ -40,14 +40,14 @@ module GHC.ExecutionStack (
   , stackSize
   , stackIndex
   , stackIndexes
-  -- ** Structures the stack translates to
-  , LocationInfo(..)
-  , showLocationInfo
+  -- ** Structures the stack can translate to
   , StackUnit(..)
   , showStackUnit
-  -- * New stuff
-  , getStackUnit 
+  , LocationInfo(..)
+  , showLocationInfo
+  -- ** Get StackUnits
   , getStackUnits
+  , getStackUnit 
   , getStackUnitCustom
   -- ** Other
   , dwarfInit

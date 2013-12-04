@@ -42,9 +42,7 @@ module GHC.ExecutionStack (
   , stackIndices
   -- ** Structures the stack can translate to
   , StackFrame(..)
-  , showStackFrame
   , LocationInfo(..)
-  , showLocationInfo
   -- ** Get StackFrames
   , getStackFrames
   , getStackFrame 

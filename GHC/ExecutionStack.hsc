@@ -207,7 +207,7 @@ foreign import ccall "Dwarf.h dwarf_addr_num_infos"
     dwarfAddrNumInfos :: Ptr Instruction -> IO CInt
 
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
-  dwarfLookupIpForeign :: 
+  dwarfLookupIp :: 
        Ptr Instruction -- ^ Instruction Pointer
     -> Ptr (Ptr DwarfProc) -- ^ DwarfUnit Pointer Pointer
     -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
@@ -222,10 +222,10 @@ getStackFrameCustom ::
     -> IO StackFrame -- ^ Result
 getStackFrameCustom ip maxNumInfos = do
     alloca $ \ppDwarfProc -> do
-      poke ppDwarfProc (nullPtr :: Ptr DwarfProc)
+      poke ppDwarfProc nullPtr
       alloca $ \ppDwarfUnit ->
         allocaArray maxNumInfos $ \infos -> do
-          numWritten <- dwarfLookupIpForeign ip ppDwarfProc ppDwarfUnit infos cMaxNumInfos
+          numWritten <- dwarfLookupIp ip ppDwarfProc ppDwarfUnit infos cMaxNumInfos
           pDwarfProc <- peek ppDwarfProc
           pDwarfUnit <- peek ppDwarfUnit
           unitName <- stringPeekWith peekDwarfUnitName pDwarfUnit

@@ -39,7 +39,7 @@ module GHC.ExecutionStack (
   , ExecutionStack ()
   , stackSize
   , stackIndex
-  , stackIndexes
+  , stackIndices
   -- ** Structures the stack can translate to
   , StackFrame(..)
   , showStackFrame
@@ -89,8 +89,8 @@ stackSize stack =
 stackIndex :: ExecutionStack -> Int -> Ptr Instruction
 stackIndex (ExecutionStack ba##) (I## i##) = Ptr (indexAddrArray## ba## i##)
 
-stackIndexes :: ExecutionStack -> [Ptr Instruction]
-stackIndexes stack = map (stackIndex stack) [0..(stackSize stack)-1]
+stackIndices :: ExecutionStack -> [Ptr Instruction]
+stackIndices stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 
 data StackFrame = StackFrame {
@@ -170,7 +170,7 @@ showExecutionStack stack =
     "Stack trace:\n" ++
     concatMap display ([0..] `zip` units)
   where
-    units = unsafePerformIO $ mapM getStackFrame (stackIndexes stack)
+    units = unsafePerformIO $ mapM getStackFrame (stackIndices stack)
     display (ix, trace) = unlines $ zipWith ($) formatters strings
       where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
             strings    = prepareStackFrame trace
@@ -240,4 +240,4 @@ getStackFrame ip = dwarfAddrNumInfos ip >>= (getStackFrameCustom ip . fromIntegr
 getStackFrames ::
        ExecutionStack
     -> IO [StackFrame]
-getStackFrames = mapM getStackFrame . stackIndexes
+getStackFrames = mapM getStackFrame . stackIndices

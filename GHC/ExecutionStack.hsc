@@ -81,8 +81,8 @@ data ExecutionStack = ExecutionStack
 
 instance Show ExecutionStack where
     show = showExecutionStack
--- | The number of functions on your stack
 
+-- | The number of functions on your stack
 stackSize :: ExecutionStack -> Int
 stackSize stack =
     I## (sizeofByteArray## (unExecutionStack stack)) `div` (#const SIZEOF_HSPTR)
@@ -101,11 +101,12 @@ data StackFrame = StackFrame {
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
 
+instance Show StackFrame where
+    show = showStackFrame
+
 -- TODO: Better name than prepareStackFrame?
 
 -- | Like 'show', without @unlines@
---
--- Note, only safe when you've not called 'dwarfFree'
 prepareStackFrame :: StackFrame -> [String]
 prepareStackFrame su | null (locationInfos su) = (:[]) $
         unitName su ++
@@ -113,14 +114,10 @@ prepareStackFrame su | null (locationInfos su) = (:[]) $
     --  mySrcFun (using /path/lib.so)
 prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
 
--- | Pretty-print a 'StackFrame'
---
--- Note, only safe when you've not called 'dwarfFree'
 showStackFrame :: StackFrame -> String
 showStackFrame = unlines . prepareStackFrame
 
--- | This is a candidate for a Instruction Pointe.  This struct
--- matches the C struct @DebugInfo_@, from dwarf.h
+-- | Location in source code
 data LocationInfo = LocationInfo {
            startLine    :: !Word16,
            startCol     :: !Word16,
@@ -130,9 +127,11 @@ data LocationInfo = LocationInfo {
            functionName :: !String
            }
            deriving(Eq)
+  -- This struct. Matches the C struct @DebugInfo_@, from dwarf.h
 
--- | Will only work if there have not been any 'dwarfFree' since the value
--- was created. For this reason 'LocationInfo' have no Show instance.
+instance Show LocationInfo where
+    show = showLocationInfo
+
 showLocationInfo :: LocationInfo -> String
 showLocationInfo LocationInfo{..} =
     functionName ++
@@ -159,6 +158,7 @@ instance Storable LocationInfo where
     poke ptr (LocationInfo{..}) =
         error "Sorry, we're not really Storable, just use it for peek :("
 
+-- We use these three guys to get type-safety
 data DwarfUnit
 data DwarfProc
 data Instruction
@@ -199,11 +199,7 @@ foreign import ccall "Dwarf.h dwarf_ensure_init" dwarfInit :: IO ()
 
 -- | Free the memory allocated when doing 'dwarfInit'. This module doesn't
 -- automatically free the memory. Instead it will hang around for the whole
--- program execution once it's initialized.
---
--- Safe to call twice.
--- 
--- Be careful! The CStrings in 'Locationinfo' will become invalidated!
+-- program execution once it's initialized. Safe to call twice.
 foreign import ccall "dwarf_free" dwarfFree :: IO ()
 
 -- For the given instruction pointer, how many LocationInfos does it have?
@@ -218,6 +214,7 @@ foreign import ccall "Dwarf.h dwarf_lookup_ip"
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write
     -> IO CInt -- ^ How many LocationInfos was actually written
+
 
 getStackFrameCustom :: 
        Ptr Instruction -- ^ Instruction Pointer

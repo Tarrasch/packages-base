@@ -221,7 +221,8 @@ getStackFrameCustom ::
     -> Int -- ^ Max amount to write
     -> IO StackFrame -- ^ Result
 getStackFrameCustom ip maxNumInfos = do
-    alloca $ \ppDwarfProc ->
+    alloca $ \ppDwarfProc -> do
+      poke ppDwarfProc (nullPtr :: Ptr DwarfProc)
       alloca $ \ppDwarfUnit ->
         allocaArray maxNumInfos $ \infos -> do
           numWritten <- dwarfLookupIpForeign ip ppDwarfProc ppDwarfUnit infos cMaxNumInfos

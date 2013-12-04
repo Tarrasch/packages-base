@@ -71,6 +71,7 @@ import Foreign.C
 import Text.Printf (printf)
 import Foreign.Storable (Storable(..))
 import Foreign.Marshal
+import Foreign.Ptr (Ptr, nullPtr)
 
 #include "Rts.h"
 
@@ -95,7 +96,7 @@ stackIndices stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 data StackFrame = StackFrame {
     unitName      :: !String
-  , procedureName ::  String -- TODO: redo strict
+  , procedureName :: !String
   , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
   }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
@@ -107,8 +108,7 @@ data StackFrame = StackFrame {
 -- Note, only safe when you've not called 'dwarfFree'
 prepareStackFrame :: StackFrame -> [String]
 prepareStackFrame su | null (locationInfos su) = (:[]) $
-        -- unitName su ++
-        "???" ++
+        unitName su ++
         " (using " ++ unitName su ++ ")"
     --  mySrcFun (using /path/lib.so)
 prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
@@ -160,10 +160,14 @@ instance Storable LocationInfo where
         error "Sorry, we're not really Storable, just use it for peek :("
 
 data DwarfUnit
+data DwarfProc
 data Instruction
 
 peekDwarfUnitName :: Ptr DwarfUnit -> IO CString
 peekDwarfUnitName ptr = #{peek struct DwarfUnit_, name } ptr
+
+peekDwarfProcName :: Ptr DwarfProc -> IO CString
+peekDwarfProcName ptr = #{peek struct DwarfProc_, name } ptr
 
 showExecutionStack :: ExecutionStack -> String
 showExecutionStack stack =
@@ -206,10 +210,10 @@ foreign import ccall "dwarf_free" dwarfFree :: IO ()
 foreign import ccall "Dwarf.h dwarf_addr_num_infos"
     dwarfAddrNumInfos :: Ptr Instruction -> IO CInt
 
---  StgWord dwarf_lookup_ip(void *ip, DwarfUnit** p_unit, DebugInfo *infos, int max_num_infos)
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
   dwarfLookupIpForeign :: 
        Ptr Instruction -- ^ Instruction Pointer
+    -> Ptr (Ptr DwarfProc) -- ^ DwarfUnit Pointer Pointer
     -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write
@@ -220,17 +224,23 @@ getStackFrameCustom ::
     -> Int -- ^ Max amount to write
     -> IO StackFrame -- ^ Result
 getStackFrameCustom ip maxNumInfos = do
-    alloca $ \ppDwarfUnit ->
-      allocaArray maxNumInfos $ \infos -> do
-        numWritten <- dwarfLookupIpForeign ip ppDwarfUnit infos cMaxNumInfos
-        pDwarfUnit <- peek ppDwarfUnit
-        unitName <- peekDwarfUnitName pDwarfUnit >>= peekCString
-        procedureName <- return $ (error "D'oh, also have to get a DwarfProc") pDwarfUnit
-        locationInfos <- mapM (peekElemOff infos)
-                              [0..(fromIntegral numWritten)-1 :: Int]
-        return StackFrame{..}
+    alloca $ \ppDwarfProc ->
+      alloca $ \ppDwarfUnit ->
+        allocaArray maxNumInfos $ \infos -> do
+          numWritten <- dwarfLookupIpForeign ip ppDwarfProc ppDwarfUnit infos cMaxNumInfos
+          pDwarfProc <- peek ppDwarfProc
+          pDwarfUnit <- peek ppDwarfUnit
+          unitName <- stringPeekWith peekDwarfUnitName pDwarfUnit
+          procedureName <- stringPeekWith peekDwarfProcName pDwarfProc
+          locationInfos <- mapM (peekElemOff infos)
+                                [0..(fromIntegral numWritten)-1 :: Int]
+          return StackFrame{..}
   where
     cMaxNumInfos = fromIntegral maxNumInfos
+
+stringPeekWith :: (Ptr a -> IO CString) -> Ptr a -> IO String
+stringPeekWith peeker ptr | ptr == nullPtr = return "<Data not found>"
+stringPeekWith peeker ptr | otherwise      = peeker ptr >>= peekCString
 
 getStackFrame ::
        Ptr Instruction

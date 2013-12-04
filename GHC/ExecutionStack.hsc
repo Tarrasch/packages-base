@@ -103,7 +103,7 @@ data StackFrame = StackFrame {
 
 -- TODO: Better name than prepareStackFrame?
 
--- | Like 'show', but with a row of comments
+-- | Like 'show', without @unlines@
 --
 -- Note, only safe when you've not called 'dwarfFree'
 prepareStackFrame :: StackFrame -> [String]

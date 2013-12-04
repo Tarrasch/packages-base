@@ -54,22 +54,14 @@ module GHC.ExecutionStack (
 
 import GHC.IO (IO(..)
              , unsafePerformIO)
-import GHC.Prim
 import GHC.Exts
-import Unsafe.Coerce
-import System.Mem
-import Data.Char
-import Data.Int
-import Data.Word
-import GHC.Word
-import Control.Monad (forM_)
-import Data.Maybe (listToMaybe)
-import Foreign.C.String
-import Foreign.C
-import Text.Printf (printf)
-import Foreign.Storable (Storable(..))
-import Foreign.Marshal
+import GHC.Word (Word16)
+import Foreign.C.String (peekCString, CString)
+import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Storable (Storable(..))
+import Foreign.Marshal (alloca, allocaArray)
+import Text.Printf (printf)
 
 #include "Rts.h"
 

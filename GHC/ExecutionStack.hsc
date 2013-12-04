@@ -144,16 +144,16 @@ showLocationInfo LocationInfo{..} =
   where
 
 instance Storable LocationInfo where
-    sizeOf _ = (#size DebugInfo)
+    sizeOf _ = (#size struct DebugInfo_)
     alignment _ = alignment (undefined :: CInt)
 
     peek ptr = do
-      startLine    <- #{peek DebugInfo, sline } ptr
-      startCol     <- #{peek DebugInfo, scol  } ptr
-      endLine      <- #{peek DebugInfo, eline } ptr
-      endCol       <- #{peek DebugInfo, ecol  } ptr
-      fileName     <- #{peek DebugInfo, file  } ptr >>= peekCString
-      functionName <- #{peek DebugInfo, name  } ptr >>= peekCString
+      startLine    <- #{peek struct DebugInfo_, sline } ptr
+      startCol     <- #{peek struct DebugInfo_, scol  } ptr
+      endLine      <- #{peek struct DebugInfo_, eline } ptr
+      endCol       <- #{peek struct DebugInfo_, ecol  } ptr
+      fileName     <- #{peek struct DebugInfo_, file  } ptr >>= peekCString
+      functionName <- #{peek struct DebugInfo_, name  } ptr >>= peekCString
       return LocationInfo {..}
 
     poke ptr (LocationInfo{..}) =
@@ -163,7 +163,7 @@ data DwarfUnit
 data Instruction
 
 peekDwarfUnitName :: Ptr DwarfUnit -> IO CString
-peekDwarfUnitName ptr = #{peek PublicDwarfUnit, name } ptr
+peekDwarfUnitName ptr = #{peek struct DwarfUnit_, name } ptr
 
 showExecutionStack :: ExecutionStack -> String
 showExecutionStack stack =

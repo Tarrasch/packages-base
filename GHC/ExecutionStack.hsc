@@ -19,12 +19,11 @@
 --      dumpExecutionStack stack
 -- @
 --
--- An 'ExecutionStack' is a data wrapper around 'ByteArray#'. The Array is
--- a reified stack. Each element can be thought as the Instruction
--- Pointers. For languages like C you can see from the instruction pointer
--- where you are in the original Haskell function. The ExecutionStack as
--- described by the STG will only contain pointers to entry code of Info
--- Tables.
+-- An 'ExecutionStack' is a data wrapper around 'ByteArray#'. The
+-- Array is a reified stack. Each element is a code address. For most
+-- frames this will be the return address for the stack frame, but
+-- for an update frame the address is the entry code of the thunk (if
+-- available)
 --
 -- /Since: 4.7.0.0/
 -----------------------------------------------------------------------------
@@ -107,7 +106,7 @@ prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
 showStackFrame :: StackFrame -> String
 showStackFrame = unlines . prepareStackFrame
 
--- | Location in source code
+-- | Location in source code.
 data LocationInfo = LocationInfo {
            startLine    :: !Word16,
            startCol     :: !Word16,

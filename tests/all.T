@@ -108,6 +108,11 @@ test('stableptr005', normal, compile_and_run, [''])
 
 test('weak001', normal, compile_and_run, [''])
 
+with_stack_trace = extra_run_opts('+RTS --stack-trace -RTS')
+test('executionStack001', with_stack_trace, compile_and_run, ['-g'])
+test('executionStack002', with_stack_trace, compile_and_run, [''])
+test('executionStack003', with_stack_trace, compile_and_run, ['-g'])
+
 # In the 65001 codepage, we can't even cat the expected output on msys:
 #     $ cat 4006.stdout
 #     It works here

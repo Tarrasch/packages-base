@@ -97,7 +97,7 @@ instance Show StackFrame where
 -- | Like 'show', without @unlines@
 prepareStackFrame :: StackFrame -> [String]
 prepareStackFrame su | null (locationInfos su) = (:[]) $
-        unitName su ++
+        procedureName su ++
         " (using " ++ unitName su ++ ")"
     --  mySrcFun (using /path/lib.so)
 prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su

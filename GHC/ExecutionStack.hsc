@@ -197,7 +197,7 @@ foreign import ccall "Dwarf.h dwarf_addr_num_infos"
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
   dwarfLookupIp ::
        Ptr Instruction -- ^ Instruction Pointer
-    -> Ptr (Ptr DwarfProc) -- ^ DwarfUnit Pointer Pointer
+    -> Ptr (Ptr DwarfProc) -- ^ DwarfProc Pointer Pointer
     -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
     -> Ptr LocationInfo -- ^ LocationInfos to write
     -> CInt -- ^ Max amount of LocationInfo one can write

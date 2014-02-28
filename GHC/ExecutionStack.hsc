@@ -113,7 +113,7 @@ data LocationInfo = LocationInfo
     , fileName     :: !String
     , functionName :: !String
     }
-           deriving(Eq)
+    deriving(Eq)
   -- This struct. Matches the C struct @DebugInfo_@, from dwarf.h
 
 instance Show LocationInfo where

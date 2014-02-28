@@ -51,8 +51,7 @@ module GHC.ExecutionStack (
   , dwarfFree
   ) where
 
-import GHC.IO (IO(..)
-             , unsafePerformIO)
+import GHC.IO (IO(..), unsafePerformIO)
 import GHC.Exts
 import GHC.Word (Word16)
 import Foreign.C.String (peekCString, CString)

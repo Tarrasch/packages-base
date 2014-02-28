@@ -114,7 +114,7 @@ data LocationInfo = LocationInfo
     , functionName :: !String
     }
     deriving(Eq)
-  -- This struct. Matches the C struct @DebugInfo_@, from dwarf.h
+  -- This struct matches the C struct @DebugInfo_@, from dwarf.h
 
 instance Show LocationInfo where
     show = showLocationInfo

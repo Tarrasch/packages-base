@@ -81,7 +81,6 @@ stackIndex (ExecutionStack ba##) (I## i##) = Ptr (indexAddrArray## ba## i##)
 stackIndices :: ExecutionStack -> [Ptr Instruction]
 stackIndices stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
-
 data StackFrame = StackFrame
     { unitName      :: !String
     , procedureName :: !String

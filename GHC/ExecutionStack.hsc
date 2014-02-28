@@ -82,11 +82,11 @@ stackIndices :: ExecutionStack -> [Ptr Instruction]
 stackIndices stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 
-data StackFrame = StackFrame {
-    unitName      :: !String
-  , procedureName :: !String
-  , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
-  }
+data StackFrame = StackFrame
+    { unitName      :: !String
+    , procedureName :: !String
+    , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
+    }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.
 
 instance Show StackFrame where
@@ -106,14 +106,14 @@ showStackFrame :: StackFrame -> String
 showStackFrame = unlines . prepareStackFrame
 
 -- | Location in source code.
-data LocationInfo = LocationInfo {
-           startLine    :: !Word16,
-           startCol     :: !Word16,
-           endLine      :: !Word16,
-           endCol       :: !Word16,
-           fileName     :: !String,
-           functionName :: !String
-           }
+data LocationInfo = LocationInfo
+    { startLine    :: !Word16
+    , startCol     :: !Word16
+    , endLine      :: !Word16
+    , endCol       :: !Word16
+    , fileName     :: !String
+    , functionName :: !String
+    }
            deriving(Eq)
   -- This struct. Matches the C struct @DebugInfo_@, from dwarf.h
 

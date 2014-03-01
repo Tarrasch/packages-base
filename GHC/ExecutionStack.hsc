@@ -82,8 +82,8 @@ stackIndices :: ExecutionStack -> [Ptr Instruction]
 stackIndices stack = map (stackIndex stack) [0..(stackSize stack)-1]
 
 data StackFrame = StackFrame
-    { unitName      :: !String
-    , procedureName :: !String
+    { unitName      :: !String -- ^ From symbol table
+    , procedureName :: !String -- ^ Also from symbol table
     , locationInfos :: ![LocationInfo] -- ^ Empty without @-g@ flag to @ghc@
     }
   -- Looking at Dwarf.h, this is one DwarfUnit and many DebugInfos.

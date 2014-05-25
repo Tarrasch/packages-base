@@ -47,8 +47,8 @@ module GHC.ExecutionStack (
   , getStackFrame
   , getStackFrameCustom
   -- ** Other
-  , dwarfInit
-  , dwarfFree
+  , dwarfForceLoad
+  , dwarfForceUnload
   ) where
 
 import GHC.IO (IO(..), unsafePerformIO)
@@ -181,13 +181,13 @@ dumpExecutionStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
 
 -- | Initialize Dwarf Memory. There's no need to call this, as the
 -- functions themselves call this. Safe to call twice
-foreign import ccall "Dwarf.h dwarf_ensure_init" dwarfInit :: IO ()
+foreign import ccall "Dwarf.h dwarf_force_load" dwarfForceLoad :: IO ()
   -- Warning, dwarf_init() is something else! Its exported in libdwarf
 
 -- | Free the memory allocated when doing 'dwarfInit'. This module doesn't
 -- automatically free the memory. Instead it will hang around for the whole
 -- program execution once it's initialized. Safe to call twice.
-foreign import ccall "dwarf_free" dwarfFree :: IO ()
+foreign import ccall "dwarf_force_load" dwarfForceUnload :: IO ()
 
 -- For the given instruction pointer, how many LocationInfos does it have?
 foreign import ccall "Dwarf.h dwarf_addr_num_infos"

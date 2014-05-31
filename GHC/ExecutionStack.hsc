@@ -16,7 +16,7 @@
 -- myFunction :: IO ()
 -- myFunction = do
 --      stack <- currentExecutionStack
---      dumpExecutionStack stack
+--      printExecutionStack stack
 -- @
 --
 -- An 'ExecutionStack' is a data wrapper around 'ByteArray#'. The
@@ -32,26 +32,34 @@
 module GHC.ExecutionStack (
   -- * Simple interface
     currentExecutionStack
-  , dumpExecutionStack
-  -- * Complicated interface
-  -- ** ExecutionStack
+  , printExecutionStack
+  -- * Intermediate interface
   , ExecutionStack ()
+  , getStackFrames
+  , StackFrame(..)
+  , LocationInfo(..)
+  , printExecutionStackRts
+  -- * Complicated interface
+  -- ** Managed loading/unloading
+  , dwarfIncRef
+  , dwarfDecRef
+  , dwarfTryUnload
+  -- ** Forceful loading/unloading
+  , dwarfForceLoad
+  , dwarfForceUnload
+  -- ** Destructing `ExecutionStack`
   , stackSize
   , stackIndex
   , stackIndices
-  -- ** Structures the stack can translate to
-  , StackFrame(..)
-  , LocationInfo(..)
-  -- ** Get StackFrames
-  , getStackFrames
+  -- ** Looking up instructions
+  , getStackFramesNoSync
   , getStackFrame
   , getStackFrameCustom
-  -- ** Other
-  , dwarfForceLoad
-  , dwarfForceUnload
+  , getStackFrameNoSync
+  , getStackFrameCustomNoSync
   ) where
 
-import GHC.IO (IO(..), unsafePerformIO)
+import GHC.IO (IO(..))
 import GHC.Exts
 import GHC.Word (Word16)
 import Foreign.C.String (peekCString, CString)
@@ -60,15 +68,13 @@ import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (Storable(..))
 import Foreign.Marshal (alloca, allocaArray)
 import Text.Printf (printf)
+import Control.Exception.Base (bracket_)
 
 #include "Rts.h"
 
 data ExecutionStack = ExecutionStack
     { unExecutionStack ::  ByteArray##
     }
-
-instance Show ExecutionStack where
-    show = showExecutionStack
 
 -- | The number of functions on your stack
 stackSize :: ExecutionStack -> Int
@@ -91,20 +97,9 @@ data StackFrame = StackFrame
 instance Show StackFrame where
     show = showStackFrame
 
--- TODO: Better name than prepareStackFrame?
-
--- | Like 'show', without @unlines@
-prepareStackFrame :: StackFrame -> [String]
-prepareStackFrame su | null (locationInfos su) = (:[]) $
-        procedureName su ++
-        " (using " ++ unitName su ++ ")"
-    --  mySrcFun (using /path/lib.so)
-prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
-
-showStackFrame :: StackFrame -> String
-showStackFrame = unlines . prepareStackFrame
-
 -- | Location in source code.
+--
+-- TODO(arash, peter): We should aim to make all the Word16s into proper Ints.
 data LocationInfo = LocationInfo
     { startLine    :: !Word16
     , startCol     :: !Word16
@@ -114,10 +109,39 @@ data LocationInfo = LocationInfo
     , functionName :: !String
     }
     deriving(Eq)
-  -- This struct matches the C struct @DebugInfo_@, from dwarf.h
+  -- This struct matches the C struct @DebugInfo_@, from Dwarf.h
 
 instance Show LocationInfo where
     show = showLocationInfo
+
+-- TODO: Better name than prepareStackFrame?
+
+-- | Like 'show', without @unlines@
+prepareStackFrame :: StackFrame -> [String]
+prepareStackFrame su | null (locationInfos su) =
+        [procedureName su ++ " (using " ++ unitName su ++ ")"]
+    --  example: mySrcFun (using /path/lib.so)
+prepareStackFrame su | otherwise = map showLocationInfo $ locationInfos su
+
+showStackFrame :: StackFrame -> String
+showStackFrame = unlines . prepareStackFrame
+
+-- | Pretty print the execution stack to stdout
+printExecutionStack :: ExecutionStack -> IO ()
+printExecutionStack stack = do
+    frames <- getStackFrames stack
+    putStrLn $ displayFramesWithHeader frames
+
+displayFramesWithHeader :: [StackFrame] -> String
+displayFramesWithHeader frames =
+    "Stack trace (Haskell):\n" ++
+    concatMap (uncurry displayFrame) ([0..] `zip` frames)
+
+-- | How one StackFrame is displayed in one stack trace
+displayFrame :: Int -> StackFrame -> String
+displayFrame ix frame = unlines $ zipWith ($) formatters strings
+      where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
+            strings    = prepareStackFrame frame
 
 showLocationInfo :: LocationInfo -> String
 showLocationInfo LocationInfo{..} =
@@ -127,7 +151,6 @@ showLocationInfo LocationInfo{..} =
     "-" ++ show endLine ++ ":" ++ show endCol ++
     ")"
     -- example: "bindIO (at libraries/base/GHC/Base.lhs:609:61-609:77)"
-  where
 
 instance Storable LocationInfo where
     sizeOf _ = (#size struct DebugInfo_)
@@ -145,7 +168,7 @@ instance Storable LocationInfo where
     poke ptr (LocationInfo{..}) =
         error "Sorry, we're not really Storable, just use it for peek :("
 
--- We use these three guys to get type-safety
+-- We use these three empty data declarations for type-safety
 data DwarfUnit
 data DwarfProc
 data Instruction
@@ -156,63 +179,76 @@ peekDwarfUnitName ptr = #{peek struct DwarfUnit_, name } ptr
 peekDwarfProcName :: Ptr DwarfProc -> IO CString
 peekDwarfProcName ptr = #{peek struct DwarfProc_, name } ptr
 
-showExecutionStack :: ExecutionStack -> String
-showExecutionStack stack =
-    "Stack trace:\n" ++
-    concatMap display ([0..] `zip` units)
-  where
-    units = unsafePerformIO $ mapM getStackFrame (stackIndices stack)
-    display (ix, trace) = unlines $ zipWith ($) formatters strings
-      where formatters = (printf "%4u: %s" (ix :: Int)) : repeat ("      " ++)
-            strings    = prepareStackFrame trace
-
 -- | Reify the stack. This is the only way to get an ExecutionStack value.
 currentExecutionStack :: IO (ExecutionStack)
-currentExecutionStack = IO (\s -> let (## new_s, byteArray## ##) = reifyStack## s
-                                      ba = ExecutionStack byteArray##
-                                  in (## new_s, ba ##) )
+currentExecutionStack =
+    IO (\s -> let (## new_s, byteArray## ##) = reifyStack## s
+                  ba = ExecutionStack byteArray##
+              in (## new_s, ba ##) )
 
--- | Pretty print the stack. Will print it to stdout. Note that this is
--- more efficent than doing 'print' as no intermediete Haskell values will
--- get created
-dumpExecutionStack :: ExecutionStack -> IO ()
-dumpExecutionStack (ExecutionStack ba) = IO (\s -> let new_s = dumpStack## ba s
-                                                   in (## new_s, () ##))
+-- | Pretty print the stack. Will print it to stdout. Note that this
+-- function is faster since it is implemented directly in the RTS.
+printExecutionStackRts :: ExecutionStack -> IO ()
+printExecutionStackRts (ExecutionStack ba) =
+    IO (\s -> let new_s = dumpStack## ba s
+              in (## new_s, () ##))
 
--- | Initialize Dwarf Memory. There's no need to call this, as the
--- functions themselves call this. Safe to call twice
+-- | Tell the dwarf module that you want to use dwarf. Synchronized.
+foreign import ccall "Dwarf.h dwarf_inc_ref" dwarfIncRef :: IO ()
+
+-- | Tell the dwarf module that you are done using dwarf. Synchronized.
+foreign import ccall "Dwarf.h dwarf_dec_ref" dwarfDecRef :: IO ()
+
+-- | Ask the dwarf module if it can unload and free up memory. It will not be
+-- able to if the module is in use. Synchronized.
+foreign import ccall "Dwarf.h dwarf_try_unload" dwarfTryUnload :: IO Bool
+
 foreign import ccall "Dwarf.h dwarf_force_load" dwarfForceLoad :: IO ()
-  -- Warning, dwarf_init() is something else! Its exported in libdwarf
 
--- | Free the memory allocated when doing 'dwarfInit'. This module doesn't
--- automatically free the memory. Instead it will hang around for the whole
--- program execution once it's initialized. Safe to call twice.
-foreign import ccall "dwarf_force_load" dwarfForceUnload :: IO ()
+foreign import ccall "Dwarf.h dwarf_force_unload" dwarfForceUnload :: IO ()
 
--- For the given instruction pointer, how many LocationInfos does it have?
+-- | For the given instruction pointer, how many LocationInfos does it have?
+--
+-- Dwarf module must be loaded to use this!
 foreign import ccall "Dwarf.h dwarf_addr_num_infos"
     dwarfAddrNumInfos :: Ptr Instruction -> IO CInt
 
+-- | Ask dwarf module for
+--
+-- Dwarf module must be loaded to use this!
 foreign import ccall "Dwarf.h dwarf_lookup_ip"
-  dwarfLookupIp ::
-       Ptr Instruction -- ^ Instruction Pointer
-    -> Ptr (Ptr DwarfProc) -- ^ DwarfProc Pointer Pointer
-    -> Ptr (Ptr DwarfUnit) -- ^ DwarfUnit Pointer Pointer
-    -> Ptr LocationInfo -- ^ LocationInfos to write
-    -> CInt -- ^ Max amount of LocationInfo one can write
+    dwarfLookupIp ::
+       Ptr Instruction -- ^ Code address you want information about
+    -> Ptr (Ptr DwarfProc) -- ^ Out: DwarfProc Pointer Pointer
+    -> Ptr (Ptr DwarfUnit) -- ^ Out: DwarfUnit Pointer Pointer
+    -> Ptr LocationInfo -- ^ Out: LocationInfos to write (array)
+    -> CInt -- ^ Max amount of LocationInfo it should write (capacity of array)
     -> IO CInt -- ^ How many LocationInfos was actually written
 
+inDwarf :: IO a -> IO a
+inDwarf = bracket_ dwarfIncRef dwarfDecRef
 
 getStackFrameCustom ::
        Ptr Instruction -- ^ Instruction Pointer
     -> Int -- ^ Max amount to write
     -> IO StackFrame -- ^ Result
-getStackFrameCustom ip maxNumInfos = do
+getStackFrameCustom ip maxNumInfos =
+    inDwarf $ getStackFrameCustomNoSync ip maxNumInfos
+
+getStackFrameCustomNoSync ::
+       Ptr Instruction -- ^ Instruction Pointer
+    -> Int -- ^ Max amount to write
+    -> IO StackFrame -- ^ Result
+getStackFrameCustomNoSync ip maxNumInfos = inDwarf $ do
     alloca $ \ppDwarfProc -> do
       poke ppDwarfProc nullPtr
       alloca $ \ppDwarfUnit ->
         allocaArray maxNumInfos $ \infos -> do
-          numWritten <- dwarfLookupIp ip ppDwarfProc ppDwarfUnit infos cMaxNumInfos
+          numWritten <- dwarfLookupIp ip
+                                      ppDwarfProc
+                                      ppDwarfUnit
+                                      infos
+                                      cMaxNumInfos
           pDwarfProc <- peek ppDwarfProc
           pDwarfUnit <- peek ppDwarfUnit
           unitName <- stringPeekWith peekDwarfUnitName pDwarfUnit
@@ -227,12 +263,15 @@ stringPeekWith :: (Ptr a -> IO CString) -> Ptr a -> IO String
 stringPeekWith peeker ptr | ptr == nullPtr = return "<Data not found>"
 stringPeekWith peeker ptr | otherwise      = peeker ptr >>= peekCString
 
-getStackFrame ::
-       Ptr Instruction
-    -> IO StackFrame
-getStackFrame ip = dwarfAddrNumInfos ip >>= (getStackFrameCustom ip . fromIntegral)
+getStackFrame :: Ptr Instruction -> IO StackFrame
+getStackFrame ip = inDwarf $ getStackFrameNoSync ip
 
-getStackFrames ::
-       ExecutionStack
-    -> IO [StackFrame]
-getStackFrames = mapM getStackFrame . stackIndices
+getStackFrameNoSync :: Ptr Instruction -> IO StackFrame
+getStackFrameNoSync ip =
+    dwarfAddrNumInfos ip >>= (getStackFrameCustomNoSync ip . fromIntegral)
+
+getStackFrames :: ExecutionStack -> IO [StackFrame]
+getStackFrames stack = inDwarf $ getStackFramesNoSync stack
+
+getStackFramesNoSync :: ExecutionStack -> IO [StackFrame]
+getStackFramesNoSync = mapM getStackFrameNoSync . stackIndices

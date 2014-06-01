@@ -1,15 +1,15 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  GHC.ExecutionStack
--- Copyright   :  (c) The University of Glasgow 2013
+-- Copyright   :  (c) The University of Glasgow 2013-2014
 -- License     :  see libraries/base/LICENSE
 --
 -- Maintainer  :  cvs-ghc@haskell.org
 -- Stability   :  internal
 -- Portability :  non-portable (GHC Extensions)
 --
--- This is a module for the efficient but inaccurate Stack Traces. If you
--- can take a factor 2 of performance penalty. You should consider using
+-- This is a module for the efficient but inaccurate stack traces. If you
+-- can take a factor 2 of performance penalty, you should consider using
 -- "GHC.Stack" as the stack traces will be more accurate and detailed.
 --
 -- @

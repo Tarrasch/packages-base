@@ -200,7 +200,9 @@ foreign import ccall "Dwarf.h dwarf_inc_ref" dwarfIncRef :: IO ()
 foreign import ccall "Dwarf.h dwarf_dec_ref" dwarfDecRef :: IO ()
 
 -- | Ask the dwarf module if it can unload and free up memory. It will not be
--- able to if the module is in use. Synchronized.
+-- able to if the module is in use or if data is not loaded. Synchronized.
+--
+-- Returns True if dwarf data was unloaded.
 foreign import ccall "Dwarf.h dwarf_try_unload" dwarfTryUnload :: IO Bool
 
 foreign import ccall "Dwarf.h dwarf_force_load" dwarfForceLoad :: IO ()
@@ -239,7 +241,7 @@ getStackFrameCustomNoSync ::
        Ptr Instruction -- ^ Instruction Pointer
     -> Int -- ^ Max amount to write
     -> IO StackFrame -- ^ Result
-getStackFrameCustomNoSync ip maxNumInfos = inDwarf $ do
+getStackFrameCustomNoSync ip maxNumInfos = do
     alloca $ \ppDwarfProc -> do
       poke ppDwarfProc nullPtr
       alloca $ \ppDwarfUnit ->
@@ -259,6 +261,8 @@ getStackFrameCustomNoSync ip maxNumInfos = inDwarf $ do
   where
     cMaxNumInfos = fromIntegral maxNumInfos
 
+-- Note: if you grepped your way to the string "<Data not found>,
+-- you probably forgot to compile that module with the `-g` flag to ghc.
 stringPeekWith :: (Ptr a -> IO CString) -> Ptr a -> IO String
 stringPeekWith peeker ptr | ptr == nullPtr = return "<Data not found>"
 stringPeekWith peeker ptr | otherwise      = peeker ptr >>= peekCString
